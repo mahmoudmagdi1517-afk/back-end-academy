@@ -42,6 +42,7 @@ module.exports = {
   'attendance.studentNotEnrolled': 'Student is not enrolled in this group',
   'attendance.managerEditOnly': 'Only a manager can change recorded attendance',
   'attendance.windowExpired': 'The 24-hour attendance window after the session has expired',
+  'attendance.invalidBatch': 'Attendance list does not match the current session roster; reload and try again',
   'subscription.noLessonsRemaining': 'The student has no lessons remaining to transfer or attend',
   'makeup.notFound': 'Makeup session not found',
   'payroll.notFound': 'Payroll not found',

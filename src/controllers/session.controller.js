@@ -58,6 +58,15 @@ const upsertAttendance = asyncHandler(async (req, res) => {
   res.json({ success: true, data: row });
 });
 
+const upsertAttendanceBatch = asyncHandler(async (req, res) => {
+  const rows = await sessionService.upsertAttendanceBatch({
+    sessionId: req.params.id,
+    attendance: req.body.attendance,
+    actor: req.user,
+  });
+  res.json({ success: true, data: rows });
+});
+
 const closeSession = asyncHandler(async (req, res) => {
   const session = await sessionService.closeSession({
     sessionId: req.params.id,
@@ -188,6 +197,7 @@ module.exports = {
   postponeSession,
   cancelSession,
   upsertAttendance,
+  upsertAttendanceBatch,
   closeSession,
   getSession,
   listSessions,

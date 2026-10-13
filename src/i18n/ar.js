@@ -45,6 +45,7 @@ module.exports = {
   'attendance.studentNotEnrolled': 'الطالب غير مسجل في هذه المجموعة',
   'attendance.managerEditOnly': 'تعديل الحضور والغياب متاح للمدير فقط',
   'attendance.windowExpired': 'انتهت مهلة تسجيل الحضور (24 ساعة بعد موعد الحصة)',
+  'attendance.invalidBatch': 'قائمة الحضور لا تطابق طلاب المجموعة الحالية؛ أعد تحميل الحصة وحاول مرة أخرى',
   'subscription.noLessonsRemaining': 'لا توجد حصص متبقية للطالب لنقلها أو تسجيل حضورها',
   'makeup.notFound': 'حصة التعويض غير موجودة',
   'payroll.notFound': 'كشف الراتب غير موجود',

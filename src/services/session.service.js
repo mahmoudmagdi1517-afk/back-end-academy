@@ -315,97 +315,148 @@ async function assertTeacherOwnsSession(user, session) {
   }
 }
 
+async function upsertAttendanceForStudent({ session, studentId, status, note, actor, dbSession }) {
+  const enrollmentCandidates = await Subscription.find({
+    studentId,
+    status: { $in: [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.COMPLETED] },
+    $or: [
+      { groupId: session.groupId },
+      { 'groupTransferHistory.fromGroupId': session.groupId },
+      { 'groupTransferHistory.toGroupId': session.groupId },
+    ],
+  }).session(dbSession);
+  const enrollment = enrollmentCandidates.find((sub) =>
+    belongsToGroupForSession(sub, session.groupId, session)
+  );
+  if (!enrollment) throw new AppError('attendance.studentNotEnrolled', 404);
+  await ensureLessonBalance(enrollment, dbSession);
+
+  const row = await Attendance.findOne({ sessionId: session._id, studentId }).session(dbSession);
+  const completed = session.status === SESSION_STATUS.COMPLETED;
+  if (actor.role === ROLES.TEACHER) {
+    if (session.status === SESSION_STATUS.CANCELLED) {
+      throw new AppError('session.notOpenForAttendance', 400);
+    }
+
+    const attendanceDeadline = session.scheduledEndAt
+      ? new Date(session.scheduledEndAt.getTime() + 24 * 60 * 60 * 1000)
+      : DateTime.fromISO(session.currentDate, { zone: TIMEZONE })
+          .endOf('day')
+          .plus({ hours: 24 })
+          .toUTC()
+          .toJSDate();
+    if (nowUtc() > attendanceDeadline) {
+      throw new AppError('attendance.windowExpired', 400);
+    }
+  } else if (completed) {
+    if (![ROLES.MANAGER, ROLES.OWNER].includes(actor.role)) {
+      throw new AppError('rbac.denied', 403);
+    }
+  } else {
+    assertOpenForAttendance(session);
+  }
+
+  if (row && row.status === status) return row;
+
+  const wasConsuming = row && LESSON_CONSUMING_STATUSES.has(row.status);
+  const willConsume = LESSON_CONSUMING_STATUSES.has(status);
+  const lessonDelta = Number(willConsume) - Number(wasConsuming);
+  if (lessonDelta > 0 && enrollment.lessonsRemaining <= 0) {
+    throw new AppError('subscription.noLessonsRemaining', 400);
+  }
+  if (lessonDelta !== 0) {
+    enrollment.lessonsRemaining = Math.min(
+      enrollment.lessonsPurchased,
+      enrollment.lessonsRemaining - lessonDelta
+    );
+    await enrollment.save({ session: dbSession });
+  }
+
+  let attendance = row;
+  if (!attendance) {
+    attendance = new Attendance({
+      sessionId: session._id,
+      studentId,
+      status,
+      markedBy: actor._id,
+      audit: [
+        {
+          at: nowUtc(),
+          actorId: actor._id,
+          fromStatus: null,
+          toStatus: status,
+          note: note || null,
+        },
+      ],
+    });
+  } else {
+    const from = attendance.status;
+    attendance.status = status;
+    attendance.markedBy = actor._id;
+    attendance.audit.push({
+      at: nowUtc(),
+      actorId: actor._id,
+      fromStatus: from,
+      toStatus: status,
+      note: note || null,
+    });
+  }
+  await attendance.save({ session: dbSession });
+  return attendance;
+}
+
 async function upsertAttendance({ sessionId, studentId, status, note, actor }) {
   return withTransaction(async (dbSession) => {
     const session = await Session.findById(sessionId).session(dbSession);
     if (!session) throw new AppError('session.notFound', 404);
     await assertTeacherOwnsSession(actor, session);
+    return upsertAttendanceForStudent({ session, studentId, status, note, actor, dbSession });
+  });
+}
 
-    const enrollmentCandidates = await Subscription.find({
-      studentId,
+async function upsertAttendanceBatch({ sessionId, attendance, actor }) {
+  return withTransaction(async (dbSession) => {
+    const session = await Session.findById(sessionId).session(dbSession);
+    if (!session) throw new AppError('session.notFound', 404);
+    await assertTeacherOwnsSession(actor, session);
+
+    const subscriptions = await Subscription.find({
       status: { $in: [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.COMPLETED] },
       $or: [
         { groupId: session.groupId },
         { 'groupTransferHistory.fromGroupId': session.groupId },
         { 'groupTransferHistory.toGroupId': session.groupId },
       ],
-    }).session(dbSession);
-    const enrollment = enrollmentCandidates.find((sub) =>
-      belongsToGroupForSession(sub, session.groupId, session)
+    })
+      .select('studentId groupId groupTransferHistory startedAt')
+      .session(dbSession);
+    const expectedStudentIds = new Set(
+      subscriptions
+        .filter((sub) => belongsToGroupForSession(sub, session.groupId, session))
+        .map((sub) => String(sub.studentId))
     );
-    if (!enrollment) throw new AppError('attendance.studentNotEnrolled', 404);
-    await ensureLessonBalance(enrollment, dbSession);
-
-    const row = await Attendance.findOne({ sessionId, studentId }).session(dbSession);
-    const completed = session.status === SESSION_STATUS.COMPLETED;
-    if (actor.role === ROLES.TEACHER) {
-      if (session.status === SESSION_STATUS.CANCELLED) {
-        throw new AppError('session.notOpenForAttendance', 400);
-      }
-
-      const attendanceDeadline = session.scheduledEndAt
-        ? new Date(session.scheduledEndAt.getTime() + 24 * 60 * 60 * 1000)
-        : DateTime.fromISO(session.currentDate, { zone: TIMEZONE })
-            .endOf('day')
-            .plus({ hours: 24 })
-            .toUTC()
-            .toJSDate();
-      if (nowUtc() > attendanceDeadline) {
-        throw new AppError('attendance.windowExpired', 400);
-      }
-    } else if (completed) {
-      if (![ROLES.MANAGER, ROLES.OWNER].includes(actor.role)) {
-        throw new AppError('rbac.denied', 403);
-      }
-    } else {
-      assertOpenForAttendance(session);
+    const submittedStudentIds = new Set(attendance.map((item) => String(item.studentId)));
+    if (
+      submittedStudentIds.size !== attendance.length ||
+      submittedStudentIds.size !== expectedStudentIds.size ||
+      [...expectedStudentIds].some((studentId) => !submittedStudentIds.has(studentId))
+    ) {
+      throw new AppError('attendance.invalidBatch', 400);
     }
 
-    const wasConsuming = row && LESSON_CONSUMING_STATUSES.has(row.status);
-    const willConsume = LESSON_CONSUMING_STATUSES.has(status);
-    const lessonDelta = Number(willConsume) - Number(wasConsuming);
-    if (lessonDelta > 0 && enrollment.lessonsRemaining <= 0) {
-      throw new AppError('subscription.noLessonsRemaining', 400);
-    }
-    if (lessonDelta !== 0) {
-      enrollment.lessonsRemaining = Math.min(
-        enrollment.lessonsPurchased,
-        enrollment.lessonsRemaining - lessonDelta
-      );
-      await enrollment.save({ session: dbSession });
-    }
-
-    let attendance = row;
-    if (!attendance) {
-      attendance = new Attendance({
-        sessionId,
-        studentId,
-        status,
-        markedBy: actor._id,
-        audit: [
-          {
-            at: nowUtc(),
-            actorId: actor._id,
-            fromStatus: null,
-            toStatus: status,
-            note: note || null,
-          },
-        ],
-      });
-    } else {
-      const from = attendance.status;
-      attendance.status = status;
-      attendance.markedBy = actor._id;
-      attendance.audit.push({
-        at: nowUtc(),
-        actorId: actor._id,
-        fromStatus: from,
-        toStatus: status,
-        note: note || null,
+    for (const item of attendance) {
+      if (item.status == null) continue;
+      await upsertAttendanceForStudent({
+        session,
+        studentId: item.studentId,
+        status: item.status,
+        note: item.note,
+        actor,
+        dbSession,
       });
     }
-    await attendance.save({ session: dbSession });
-    return attendance;
+
+    return Attendance.find({ sessionId: session._id }).session(dbSession);
   });
 }
 
@@ -467,6 +518,7 @@ module.exports = {
   postponeSession,
   cancelSession,
   upsertAttendance,
+  upsertAttendanceBatch,
   closeSession,
   createMakeup,
   markMakeupMissed,

@@ -183,6 +183,22 @@ const upsertAttendance = Joi.object({
   note: Joi.string().allow(null, ''),
 });
 
+const attendanceBatch = Joi.object({
+  attendance: Joi.array()
+    .items(
+      Joi.object({
+        studentId: objectId.required(),
+        status: Joi.string()
+          .valid(...Object.values(ATTENDANCE_STATUS))
+          .allow(null)
+          .default(null),
+        note: Joi.string().allow(null, ''),
+      })
+    )
+    .unique('studentId')
+    .required(),
+});
+
 const createMakeup = Joi.object({
   studentId: objectId.required(),
   groupId: objectId.required(),
@@ -256,6 +272,7 @@ module.exports = {
   postponeSession,
   cancelSession,
   upsertAttendance,
+  attendanceBatch,
   createMakeup,
   createEmployee,
   salaryConfig,

@@ -19,6 +19,12 @@ router.post('/makeups/:id/missed', requirePermission('makeup.create'), ctrl.mark
 router.get('/:id', requireRoles(ROLES.MANAGER, ROLES.OWNER, ROLES.ADMIN, ROLES.TEACHER), ctrl.getSession);
 router.post('/:id/postpone', requirePermission('session.postpone'), validate(schemas.postponeSession), ctrl.postponeSession);
 router.post('/:id/cancel', requirePermission('session.cancel'), validate(schemas.cancelSession), ctrl.cancelSession);
+router.post(
+  '/:id/attendance/batch',
+  requirePermission('attendance.record'),
+  validate(schemas.attendanceBatch),
+  ctrl.upsertAttendanceBatch
+);
 router.post('/:id/attendance', requirePermission('attendance.record'), validate(schemas.upsertAttendance), ctrl.upsertAttendance);
 router.post('/:id/close', requirePermission('session.close'), ctrl.closeSession);
 
