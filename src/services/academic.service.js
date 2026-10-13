@@ -232,11 +232,9 @@ async function subscribe({
   actorId,
 }) {
   return withTransaction(async (session) => {
-    const [student, course, group] = await Promise.all([
-      Student.findById(studentId).session(session),
-      Course.findById(courseId).session(session),
-      Group.findById(groupId).session(session),
-    ]);
+    const student = await Student.findById(studentId).session(session);
+    const course = await Course.findById(courseId).session(session);
+    const group = await Group.findById(groupId).session(session);
     if (!student) throw new AppError('student.notFound', 404);
     if (!course) throw new AppError('course.notFound', 404);
     if (!group) throw new AppError('group.notFound', 404);
