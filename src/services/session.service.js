@@ -4,7 +4,7 @@ const { MakeupSession } = require('../models/MakeupSession');
 const { withTransaction } = require('../utils/transaction');
 const {
   LESSON_CONSUMING_STATUSES,
-  belongsToGroupAt,
+  belongsToGroupForSession,
   ensureLessonBalance,
 } = require('./lessonBalance.service');
 const { Group } = require('../models/Group');
@@ -315,7 +315,7 @@ async function assertTeacherOwnsSession(user, session) {
   }
 }
 
-async function upsertAttendance({ sessionId, studentId, status, note, actor, forceAfterComplete }) {
+async function upsertAttendance({ sessionId, studentId, status, note, actor }) {
   return withTransaction(async (dbSession) => {
     const session = await Session.findById(sessionId).session(dbSession);
     if (!session) throw new AppError('session.notFound', 404);
@@ -330,18 +330,30 @@ async function upsertAttendance({ sessionId, studentId, status, note, actor, for
         { 'groupTransferHistory.toGroupId': session.groupId },
       ],
     }).session(dbSession);
-    const sessionAt = session.scheduledStartAt || new Date(`${session.currentDate}T12:00:00.000Z`);
     const enrollment = enrollmentCandidates.find((sub) =>
-      belongsToGroupAt(sub, session.groupId, sessionAt)
+      belongsToGroupForSession(sub, session.groupId, session)
     );
     if (!enrollment) throw new AppError('attendance.studentNotEnrolled', 404);
     await ensureLessonBalance(enrollment, dbSession);
 
+    const row = await Attendance.findOne({ sessionId, studentId }).session(dbSession);
     const completed = session.status === SESSION_STATUS.COMPLETED;
-    if (completed) {
-      if (!forceAfterComplete && ![ROLES.MANAGER, ROLES.OWNER].includes(actor.role)) {
-        throw new AppError('rbac.denied', 403);
+    if (actor.role === ROLES.TEACHER) {
+      if (row) throw new AppError('attendance.managerEditOnly', 403);
+      if (completed) throw new AppError('rbac.denied', 403);
+      assertOpenForAttendance(session);
+
+      const attendanceDeadline = session.scheduledEndAt
+        ? new Date(session.scheduledEndAt.getTime() + 24 * 60 * 60 * 1000)
+        : DateTime.fromISO(session.currentDate, { zone: TIMEZONE })
+            .endOf('day')
+            .plus({ hours: 24 })
+            .toUTC()
+            .toJSDate();
+      if (nowUtc() > attendanceDeadline) {
+        throw new AppError('attendance.windowExpired', 400);
       }
+    } else if (completed) {
       if (![ROLES.MANAGER, ROLES.OWNER].includes(actor.role)) {
         throw new AppError('rbac.denied', 403);
       }
@@ -349,7 +361,6 @@ async function upsertAttendance({ sessionId, studentId, status, note, actor, for
       assertOpenForAttendance(session);
     }
 
-    const row = await Attendance.findOne({ sessionId, studentId }).session(dbSession);
     const wasConsuming = row && LESSON_CONSUMING_STATUSES.has(row.status);
     const willConsume = LESSON_CONSUMING_STATUSES.has(status);
     const lessonDelta = Number(willConsume) - Number(wasConsuming);
@@ -402,6 +413,9 @@ async function closeSession({ sessionId, actor }) {
   const session = await Session.findById(sessionId);
   if (!session) throw new AppError('session.notFound', 404);
   await assertTeacherOwnsSession(actor, session);
+  if (![ROLES.MANAGER, ROLES.OWNER].includes(actor.role)) {
+    throw new AppError('rbac.denied', 403);
+  }
   if (session.status === SESSION_STATUS.COMPLETED) {
     throw new AppError('session.alreadyCompleted', 400);
   }

@@ -10,7 +10,10 @@ const { AppError } = require('../utils/AppError');
 const { ROLES, SUBSCRIPTION_STATUS } = require('../constants');
 const { DateTime } = require('luxon');
 const { TIMEZONE } = require('../constants');
-const { belongsToGroupAt, ensureLessonBalance } = require('../services/lessonBalance.service');
+const {
+  belongsToGroupForSession,
+  ensureLessonBalance,
+} = require('../services/lessonBalance.service');
 
 function assertTeacherOwnsSession(user, session) {
   if (user.role === ROLES.TEACHER && (
@@ -51,7 +54,6 @@ const upsertAttendance = asyncHandler(async (req, res) => {
     status: req.body.status,
     note: req.body.note,
     actor: req.user,
-    forceAfterComplete: [ROLES.MANAGER, ROLES.OWNER].includes(req.user.role),
   });
   res.json({ success: true, data: row });
 });
@@ -79,9 +81,8 @@ const getSession = asyncHandler(async (req, res) => {
       ],
     }).select('studentId groupId groupTransferHistory startedAt'),
   ]);
-  const sessionAt = session.scheduledStartAt || new Date(`${session.currentDate}T12:00:00.000Z`);
   const enrolledAtSession = subscriptions.filter((sub) =>
-    belongsToGroupAt(sub, session.groupId, sessionAt)
+    belongsToGroupForSession(sub, session.groupId, session)
   );
   const students = await Student.find({ _id: { $in: enrolledAtSession.map((row) => row.studentId) } })
     .select('name nameAr studentCode')

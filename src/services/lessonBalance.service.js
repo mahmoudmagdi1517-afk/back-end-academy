@@ -1,6 +1,7 @@
 const { Attendance } = require('../models/Attendance');
 const { Session } = require('../models/Session');
 const { Group } = require('../models/Group');
+const { qatarBusinessDate } = require('../utils/time');
 
 const LESSON_CONSUMING_STATUSES = new Set(['present', 'late']);
 
@@ -52,8 +53,22 @@ function belongsToGroupAt(subscription, groupId, at) {
   return historicalGroupId === String(groupId);
 }
 
+function belongsToGroupForSession(subscription, groupId, session) {
+  const sessionAt =
+    session.scheduledStartAt || new Date(`${session.currentDate}T12:00:00.000Z`);
+  if (belongsToGroupAt(subscription, groupId, sessionAt)) return true;
+  if (String(subscription.groupId) !== String(groupId)) return false;
+
+  return (subscription.groupTransferHistory || []).some(
+    (transfer) =>
+      String(transfer.toGroupId) === String(groupId) &&
+      qatarBusinessDate(transfer.at) === session.currentDate
+  );
+}
+
 module.exports = {
   LESSON_CONSUMING_STATUSES,
   ensureLessonBalance,
   belongsToGroupAt,
+  belongsToGroupForSession,
 };

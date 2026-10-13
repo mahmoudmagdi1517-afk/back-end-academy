@@ -40,6 +40,8 @@ module.exports = {
   'session.teacherScheduleConflict': 'Teacher already has another session scheduled at this time',
   'attendance.notFound': 'Attendance record not found',
   'attendance.studentNotEnrolled': 'Student is not enrolled in this group',
+  'attendance.managerEditOnly': 'Only a manager can change recorded attendance',
+  'attendance.windowExpired': 'The 24-hour attendance window after the session has expired',
   'subscription.noLessonsRemaining': 'The student has no lessons remaining to transfer or attend',
   'makeup.notFound': 'Makeup session not found',
   'payroll.notFound': 'Payroll not found',
