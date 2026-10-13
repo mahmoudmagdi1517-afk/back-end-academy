@@ -339,9 +339,9 @@ async function upsertAttendance({ sessionId, studentId, status, note, actor }) {
     const row = await Attendance.findOne({ sessionId, studentId }).session(dbSession);
     const completed = session.status === SESSION_STATUS.COMPLETED;
     if (actor.role === ROLES.TEACHER) {
-      if (row) throw new AppError('attendance.managerEditOnly', 403);
-      if (completed) throw new AppError('rbac.denied', 403);
-      assertOpenForAttendance(session);
+      if (session.status === SESSION_STATUS.CANCELLED) {
+        throw new AppError('session.notOpenForAttendance', 400);
+      }
 
       const attendanceDeadline = session.scheduledEndAt
         ? new Date(session.scheduledEndAt.getTime() + 24 * 60 * 60 * 1000)
