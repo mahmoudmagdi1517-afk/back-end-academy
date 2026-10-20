@@ -32,6 +32,7 @@ router.get('/groups', requirePermission('group.manage'), ctrl.listGroups);
 router.post('/subscriptions', requirePermission('finance.access'), validate(schemas.subscribe), ctrl.subscribe);
 router.get('/subscriptions', requirePermission('finance.access'), ctrl.listSubscriptions);
 router.get('/subscriptions/:id', requirePermission('finance.access'), ctrl.getSubscription);
+router.delete('/subscriptions/:id', requirePermission('finance.access'), ctrl.deleteSubscription);
 router.post(
   '/subscriptions/:id/transfer-group',
   requirePermission('finance.access'),

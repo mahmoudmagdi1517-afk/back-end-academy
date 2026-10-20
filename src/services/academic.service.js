@@ -14,7 +14,7 @@ const {
   INSTALLMENT_STATUS,
   PAYMENT_STATUS,
 } = require('../constants');
-const { nowUtc } = require('../utils/time');
+const { nowUtc, qatarToday } = require('../utils/time');
 const { withTeacherScheduleLocks } = require('../utils/teacherScheduleLock');
 const {
   refreshInstallmentStatuses,
@@ -352,6 +352,31 @@ async function subscribe({
   });
 }
 
+async function deleteSubscription(subscriptionId) {
+  return withTransaction(async (session) => {
+    const sub = await Subscription.findById(subscriptionId).session(session);
+    if (!sub) throw new AppError('subscription.notFound', 404);
+
+    const group = await Group.findById(sub.groupId).session(session);
+    if (!group) throw new AppError('group.notFound', 404);
+    if (!group.startDate || group.startDate <= qatarToday()) {
+      throw new AppError('subscription.cannotDelete', 409);
+    }
+
+    const paymentExists = await Payment.exists({ subscriptionId }).session(session);
+    const lessonsUsed =
+      sub.lessonsPurchased != null &&
+      sub.lessonsRemaining != null &&
+      sub.lessonsRemaining < sub.lessonsPurchased;
+    if (paymentExists || sub.paidAmount > 0 || lessonsUsed) {
+      throw new AppError('subscription.cannotDelete', 409);
+    }
+
+    await sub.deleteOne({ session });
+    return sub;
+  });
+}
+
 /**
  * Same-course group change = transfer on that subscription (no new financial agreement).
  */
@@ -457,6 +482,7 @@ module.exports = {
   createGroup,
   updateGroup,
   subscribe,
+  deleteSubscription,
   transferGroup,
   modifyInstallmentPlan,
   normalizePlan,

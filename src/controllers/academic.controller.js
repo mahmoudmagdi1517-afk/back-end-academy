@@ -147,6 +147,11 @@ const getSubscription = asyncHandler(async (req, res) => {
   res.json({ success: true, data: sub });
 });
 
+const deleteSubscription = asyncHandler(async (req, res) => {
+  const sub = await academic.deleteSubscription(req.params.id);
+  res.json({ success: true, data: sub });
+});
+
 const listSubscriptions = asyncHandler(async (req, res) => {
   const q = {};
   if (req.query.studentId) q.studentId = req.query.studentId;
@@ -173,5 +178,6 @@ module.exports = {
   listTeacherRoster,
   modifyPlan,
   getSubscription,
+  deleteSubscription,
   listSubscriptions,
 };

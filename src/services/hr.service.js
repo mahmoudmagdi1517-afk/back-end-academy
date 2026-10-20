@@ -6,6 +6,7 @@ const { PayrollAdjustment } = require('../models/PayrollAdjustment');
 const { Leave } = require('../models/Leave');
 const { Session } = require('../models/Session');
 const { User } = require('../models/User');
+const { Group } = require('../models/Group');
 const { AppError } = require('../utils/AppError');
 const { withTransaction } = require('../utils/transaction');
 const {
@@ -46,6 +47,73 @@ async function createEmployee(payload) {
     });
   }
   return employee;
+}
+
+async function updateEmployee({ employeeId, payload }) {
+  return withTransaction(async (session) => {
+    const employee = await Employee.findById(employeeId).session(session);
+    if (!employee) throw new AppError('employee.notFound', 404);
+
+    const nextRole = payload.role || employee.role || (
+      employee.isTeacher ? EMPLOYEE_ROLES.INSTRUCTOR : EMPLOYEE_ROLES.STAFF
+    );
+    const roleChanged = nextRole !== employee.role;
+    if (roleChanged) {
+      const [linkedUser, assignedGroup, assignedSession] = await Promise.all([
+        User.exists({ employeeId }).session(session),
+        Group.exists({ teacherEmployeeId: employeeId }).session(session),
+        Session.exists({ teacherEmployeeId: employeeId }).session(session),
+      ]);
+      if (linkedUser) throw new AppError('employee.accountRoleChange', 409);
+      if (assignedGroup || assignedSession) throw new AppError('employee.roleInUse', 409);
+    }
+
+    for (const field of ['name', 'nameAr', 'phone', 'email', 'hireDate']) {
+      if (payload[field] !== undefined) employee[field] = payload[field] || null;
+    }
+    employee.role = nextRole;
+    employee.isTeacher = nextRole === EMPLOYEE_ROLES.INSTRUCTOR;
+    await employee.save({ session });
+
+    if (employee.isTeacher) {
+      await TeacherProfile.findOneAndUpdate(
+        { employeeId },
+        {
+          $set: {
+            specialties: payload.specialties || [],
+            notes: payload.notes || null,
+          },
+          $setOnInsert: { employeeId },
+        },
+        { upsert: true, new: true, runValidators: true, session }
+      );
+    } else {
+      await TeacherProfile.deleteOne({ employeeId }, { session });
+    }
+    return employee;
+  });
+}
+
+async function deleteEmployee(employeeId) {
+  return withTransaction(async (session) => {
+    const employee = await Employee.findById(employeeId).session(session);
+    if (!employee) throw new AppError('employee.notFound', 404);
+
+    const references = await Promise.all([
+      User.exists({ employeeId }).session(session),
+      Group.exists({ teacherEmployeeId: employeeId }).session(session),
+      Session.exists({ teacherEmployeeId: employeeId }).session(session),
+      SalaryConfiguration.exists({ employeeId }).session(session),
+      Payroll.exists({ employeeId }).session(session),
+      PayrollAdjustment.exists({ employeeId }).session(session),
+      Leave.exists({ employeeId }).session(session),
+    ]);
+    if (references.some(Boolean)) throw new AppError('employee.hasRecords', 409);
+
+    await TeacherProfile.deleteOne({ employeeId }, { session });
+    await employee.deleteOne({ session });
+    return employee;
+  });
 }
 
 async function linkTeacherUser({ userId, employeeId }) {
@@ -328,6 +396,8 @@ async function createLeave({ employeeId, startDate, endDate, reason, actorId }) 
 
 module.exports = {
   createEmployee,
+  updateEmployee,
+  deleteEmployee,
   linkTeacherUser,
   setSalaryConfiguration,
   getOrCreatePayroll,

@@ -12,6 +12,8 @@ router.use(requirePermission('hr.access'));
 
 router.post('/employees', validate(schemas.createEmployee), ctrl.createEmployee);
 router.get('/employees', ctrl.listEmployees);
+router.patch('/employees/:id', validate(schemas.updateEmployee), ctrl.updateEmployee);
+router.delete('/employees/:id', ctrl.deleteEmployee);
 router.post('/employees/:id/salary', validate(schemas.salaryConfig), ctrl.setSalary);
 router.post('/employees/:id/payroll/calculate', requirePermission('payroll.access'), validate(schemas.payrollCalc), ctrl.calculatePayroll);
 router.post('/employees/:id/adjustments', requirePermission('payroll.access'), validate(schemas.createAdjustment), ctrl.createAdjustment);

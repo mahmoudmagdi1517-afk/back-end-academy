@@ -1,4 +1,5 @@
 const { Employee } = require('../models/Employee');
+const { TeacherProfile } = require('../models/TeacherProfile');
 const { User } = require('../models/User');
 const { Payroll } = require('../models/Payroll');
 const { Leave } = require('../models/Leave');
@@ -20,12 +21,33 @@ const listEmployees = asyncHandler(async (_req, res) => {
     User.find({ employeeId: { $ne: null } }).select('employeeId'),
   ]);
   const linkedIds = new Set(linkedUsers.map((user) => String(user.employeeId)));
+  const profiles = await TeacherProfile.find({
+    employeeId: { $in: employees.map((employee) => employee._id) },
+  });
+  const profileByEmployeeId = new Map(
+    profiles.map((profile) => [String(profile.employeeId), profile])
+  );
   const rows = employees.map((employee) => ({
     ...employee.toObject(),
     role: employee.role || (employee.isTeacher ? 'instructor' : 'staff'),
     hasUserAccount: linkedIds.has(String(employee._id)),
+    specialties: profileByEmployeeId.get(String(employee._id))?.specialties || [],
+    notes: profileByEmployeeId.get(String(employee._id))?.notes || null,
   }));
   res.json({ success: true, data: rows });
+});
+
+const updateEmployee = asyncHandler(async (req, res) => {
+  const employee = await hr.updateEmployee({
+    employeeId: req.params.id,
+    payload: req.body,
+  });
+  res.json({ success: true, data: employee });
+});
+
+const deleteEmployee = asyncHandler(async (req, res) => {
+  const employee = await hr.deleteEmployee(req.params.id);
+  res.json({ success: true, data: employee });
 });
 
 const setSalary = asyncHandler(async (req, res) => {
@@ -123,6 +145,8 @@ const runJobsNow = asyncHandler(async (_req, res) => {
 
 module.exports = {
   createEmployee,
+  updateEmployee,
+  deleteEmployee,
   listEmployees,
   setSalary,
   calculatePayroll,

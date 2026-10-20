@@ -228,6 +228,17 @@ const createEmployee = Joi.object({
   notes: Joi.string().allow(null, ''),
 });
 
+const updateEmployee = Joi.object({
+  name: Joi.string().min(1),
+  nameAr: Joi.string().allow(null, ''),
+  phone: Joi.string().allow(null, ''),
+  email: Joi.string().email().allow(null, ''),
+  hireDate: qatarDate.allow(null),
+  role: Joi.string().valid(...Object.values(EMPLOYEE_ROLES)),
+  specialties: Joi.array().items(Joi.string()),
+  notes: Joi.string().allow(null, ''),
+}).min(1);
+
 const salaryConfig = Joi.object({
   type: Joi.string()
     .valid(...Object.values(SALARY_TYPE))
@@ -284,6 +295,7 @@ module.exports = {
   attendanceBatch,
   createMakeup,
   createEmployee,
+  updateEmployee,
   salaryConfig,
   payrollCalc,
   payPayroll,
