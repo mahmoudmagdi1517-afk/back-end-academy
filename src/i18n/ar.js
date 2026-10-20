@@ -15,6 +15,8 @@ module.exports = {
   'student.notFound': 'الطالب غير موجود',
   'course.notFound': 'الدورة غير موجودة',
   'course.codeExists': 'رمز الدورة موجود مسبقاً',
+  'course.activeGroup': 'لا يمكن حذف الدورة؛ توجد مجموعة نشطة مرتبطة بها الآن',
+  'course.archived': 'لا يمكن إنشاء مجموعة لدورة مؤرشفة',
   'group.notFound': 'المجموعة غير موجودة',
   'group.invalidSchedule': 'يجب أن يكون وقت نهاية موعد المجموعة بعد وقت بدايته',
   'group.invalidStartDate': 'تاريخ بداية المجموعة غير صالح',

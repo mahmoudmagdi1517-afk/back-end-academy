@@ -118,9 +118,37 @@ async function createCourse(payload) {
   }
 }
 
+async function updateCourse(courseId, payload) {
+  try {
+    const course = await Course.findByIdAndUpdate(
+      courseId,
+      { $set: payload },
+      { new: true, runValidators: true }
+    );
+    if (!course) throw new AppError('course.notFound', 404);
+    return course;
+  } catch (err) {
+    if (err.code === 11000) throw new AppError('course.codeExists', 409);
+    throw err;
+  }
+}
+
+async function archiveCourse(courseId) {
+  const course = await Course.findById(courseId);
+  if (!course) throw new AppError('course.notFound', 404);
+
+  const activeGroup = await Group.findOne({ courseId, isActive: true });
+  if (activeGroup) throw new AppError('course.activeGroup', 409);
+
+  course.isActive = false;
+  await course.save();
+  return course;
+}
+
 async function createGroup(payload) {
   const course = await Course.findById(payload.courseId);
   if (!course) throw new AppError('course.notFound', 404);
+  if (!course.isActive) throw new AppError('course.archived', 409);
   const schedules = payload.schedules || [];
   assertValidSchedules(schedules);
   const group = await withTeacherScheduleLocks([payload.teacherEmployeeId], async () => {
@@ -424,6 +452,8 @@ async function modifyInstallmentPlan({ subscriptionId, unpaidRows, reason, actor
 module.exports = {
   createStudent,
   createCourse,
+  updateCourse,
+  archiveCourse,
   createGroup,
   updateGroup,
   subscribe,

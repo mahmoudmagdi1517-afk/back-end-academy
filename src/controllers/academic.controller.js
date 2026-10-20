@@ -38,6 +38,16 @@ const createCourse = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: course });
 });
 
+const updateCourse = asyncHandler(async (req, res) => {
+  const course = await academic.updateCourse(req.params.id, req.body);
+  res.json({ success: true, data: course });
+});
+
+const archiveCourse = asyncHandler(async (req, res) => {
+  const course = await academic.archiveCourse(req.params.id);
+  res.json({ success: true, data: course });
+});
+
 const listCourses = asyncHandler(async (_req, res) => {
   const courses = await Course.find().sort({ code: 1 });
   res.json({ success: true, data: courses });
@@ -152,6 +162,8 @@ module.exports = {
   listStudents,
   getStudent,
   createCourse,
+  updateCourse,
+  archiveCourse,
   listCourses,
   createGroup,
   updateGroup,

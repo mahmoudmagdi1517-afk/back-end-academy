@@ -56,6 +56,14 @@ const createCourse = Joi.object({
   defaultPrice: Joi.number().integer().min(0).required(),
 });
 
+const updateCourse = Joi.object({
+  code: Joi.string().min(1),
+  name: Joi.string().min(1),
+  nameAr: Joi.string().allow(null, ''),
+  description: Joi.string().allow(null, ''),
+  defaultPrice: Joi.number().integer().min(0),
+}).min(1);
+
 const createGroup = Joi.object({
   courseId: objectId.required(),
   name: Joi.string().required(),
@@ -259,6 +267,7 @@ module.exports = {
   createUser,
   createStudent,
   createCourse,
+  updateCourse,
   createGroup,
   updateGroup,
   subscribe,

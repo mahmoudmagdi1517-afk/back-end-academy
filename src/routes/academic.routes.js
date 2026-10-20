@@ -21,6 +21,8 @@ router.get('/students', requirePermission('student.manage'), ctrl.listStudents);
 router.get('/students/:id', requirePermission('student.manage'), ctrl.getStudent);
 
 router.post('/courses', requirePermission('course.manage'), validate(schemas.createCourse), ctrl.createCourse);
+router.patch('/courses/:id', requirePermission('course.manage'), validate(schemas.updateCourse), ctrl.updateCourse);
+router.delete('/courses/:id', requirePermission('course.manage'), ctrl.archiveCourse);
 router.get('/courses', requirePermission('course.manage'), ctrl.listCourses);
 
 router.post('/groups', requirePermission('group.manage'), validate(schemas.createGroup), ctrl.createGroup);

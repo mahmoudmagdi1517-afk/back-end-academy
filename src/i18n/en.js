@@ -15,6 +15,8 @@ module.exports = {
   'student.notFound': 'Student not found',
   'course.notFound': 'Course not found',
   'course.codeExists': 'Course code already exists',
+  'course.activeGroup': 'The course cannot be deleted because it is linked to an active group',
+  'course.archived': 'A group cannot be created for an archived course',
   'group.notFound': 'Group not found',
   'group.invalidSchedule': 'Group schedule end time must be after its start time',
   'group.invalidStartDate': 'Group start date is invalid',
