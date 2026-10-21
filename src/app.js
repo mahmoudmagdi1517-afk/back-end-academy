@@ -121,7 +121,6 @@ function createApp() {
   });
 
   mountRoutes(app);
-
   app.use(notFoundHandler);
   app.use(errorHandler);
 
