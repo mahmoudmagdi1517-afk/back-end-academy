@@ -2,6 +2,9 @@ const mongoose = require('mongoose');
 const { Student } = require('../models/Student');
 const { Course } = require('../models/Course');
 const { Group } = require('../models/Group');
+const { Session } = require('../models/Session');
+const { Attendance } = require('../models/Attendance');
+const { MakeupSession } = require('../models/MakeupSession');
 const { Employee } = require('../models/Employee');
 const { Subscription } = require('../models/Subscription');
 const { Payment } = require('../models/Payment');
@@ -13,6 +16,7 @@ const {
   CURRENCY,
   INSTALLMENT_STATUS,
   PAYMENT_STATUS,
+  SESSION_STATUS,
 } = require('../constants');
 const { nowUtc, qatarToday } = require('../utils/time');
 const { withTeacherScheduleLocks } = require('../utils/teacherScheduleLock');
@@ -216,6 +220,49 @@ async function updateGroup(groupId, payload) {
     await sessionService.syncGroupSessions(updated, { replaceFuture: true });
   }
   return updated;
+}
+
+async function deleteGroup(groupId) {
+  return withTransaction(async (session) => {
+    const group = await Group.findById(groupId).session(session);
+    if (!group) throw new AppError('group.notFound', 404);
+
+    const today = qatarToday();
+    if (!group.startDate || group.startDate <= today) {
+      throw new AppError('group.cannotDeleteStarted', 409);
+    }
+
+    const linkedSubscription = await Subscription.exists({
+      $or: [
+        { groupId },
+        { 'groupTransferHistory.fromGroupId': groupId },
+        { 'groupTransferHistory.toGroupId': groupId },
+      ],
+    }).session(session);
+    if (linkedSubscription) throw new AppError('group.hasRecords', 409);
+
+    const sessions = await Session.find({ groupId })
+      .select('_id originalDate currentDate status')
+      .session(session);
+    const startedSession = sessions.some((row) =>
+      row.status !== SESSION_STATUS.CANCELLED &&
+      (row.status === SESSION_STATUS.COMPLETED ||
+        row.originalDate <= today ||
+        row.currentDate <= today)
+    );
+    if (startedSession) throw new AppError('group.cannotDeleteStarted', 409);
+
+    const sessionIds = sessions.map((row) => row._id);
+    const [attendance, makeup] = await Promise.all([
+      Attendance.exists({ sessionId: { $in: sessionIds } }).session(session),
+      MakeupSession.exists({ groupId }).session(session),
+    ]);
+    if (attendance || makeup) throw new AppError('group.hasRecords', 409);
+
+    await Session.deleteMany({ groupId }, { session });
+    await group.deleteOne({ session });
+    return group;
+  });
 }
 
 function normalizePlan(price, installments, initialPaymentAmount = 0) {
@@ -481,6 +528,7 @@ module.exports = {
   archiveCourse,
   createGroup,
   updateGroup,
+  deleteGroup,
   subscribe,
   deleteSubscription,
   transferGroup,

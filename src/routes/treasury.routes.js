@@ -10,6 +10,7 @@ router.use(authenticate, requirePermission('expense.manage'));
 router.get('/summary', ctrl.getSummary);
 router.get('/cashboxes', ctrl.listCashboxes);
 router.post('/cashboxes', validate(schemas.createCashbox), ctrl.createCashbox);
+router.post('/cashboxes/:id/deposits', validate(schemas.addFunds), ctrl.addFunds);
 router.get('/transactions', ctrl.listTransactions);
 
 module.exports = router;

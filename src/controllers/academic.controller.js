@@ -63,6 +63,11 @@ const updateGroup = asyncHandler(async (req, res) => {
   res.json({ success: true, data: group });
 });
 
+const deleteGroup = asyncHandler(async (req, res) => {
+  const group = await academic.deleteGroup(req.params.id);
+  res.json({ success: true, data: group });
+});
+
 const listGroups = asyncHandler(async (req, res) => {
   const q = {};
   if (req.query.courseId) q.courseId = req.query.courseId;
@@ -172,6 +177,7 @@ module.exports = {
   listCourses,
   createGroup,
   updateGroup,
+  deleteGroup,
   listGroups,
   subscribe,
   transferGroup,

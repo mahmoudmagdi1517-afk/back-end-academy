@@ -10,6 +10,7 @@ async function recordMovement({
   amount,
   direction,
   description,
+  source,
   referenceId,
   referenceType,
   actorId,
@@ -35,6 +36,7 @@ async function recordMovement({
         kind,
         amount: change,
         description,
+        source: source || null,
         referenceId: referenceId || null,
         referenceType: referenceType || null,
         occurredAt: occurredAt || nowUtc(),
@@ -79,6 +81,21 @@ async function createCashbox({ name, type, openingBalance, actorId }) {
   });
 }
 
+async function addFunds({ cashboxId, amount, source, actorId }) {
+  return withTransaction((session) =>
+    recordMovement({
+      cashboxId,
+      kind: 'deposit',
+      amount,
+      direction: 'in',
+      description: 'Manual deposit',
+      source: source.trim(),
+      actorId,
+      session,
+    })
+  );
+}
+
 async function listTransactions(limit = 200) {
   return TreasuryTransaction.find()
     .sort({ occurredAt: -1, createdAt: -1 })
@@ -95,4 +112,4 @@ async function getSummary() {
   return { cashboxes, totalBalance, recentTransactions: transactions };
 }
 
-module.exports = { createCashbox, listTransactions, getSummary, recordMovement };
+module.exports = { createCashbox, addFunds, listTransactions, getSummary, recordMovement };

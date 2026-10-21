@@ -5,7 +5,6 @@ Node.js + Express + MongoDB backend for Qatar academy operations.
 - Currency: **QAR** (integer fils)
 - Timezone: **Asia/Qatar** (store UTC; calendar/business dates in Qatar)
 - Locales: `en` / `ar`
-- No frontend, no TypeScript
 
 ## Setup
 

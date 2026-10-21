@@ -272,6 +272,11 @@ const createCashbox = Joi.object({
   openingBalance: Joi.number().integer().min(0).default(0),
 });
 
+const addFunds = Joi.object({
+  amount: Joi.number().integer().min(1).required(),
+  source: Joi.string().trim().min(2).max(200).required(),
+});
+
 module.exports = {
   login,
   refresh,
@@ -287,6 +292,7 @@ module.exports = {
   createPayment,
   createExpense,
   createCashbox,
+  addFunds,
   reversePayment,
   createSession,
   postponeSession,

@@ -7,6 +7,15 @@ const createCashbox = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: cashbox });
 });
 
+const addFunds = asyncHandler(async (req, res) => {
+  const transaction = await treasury.addFunds({
+    ...req.body,
+    cashboxId: req.params.id,
+    actorId: req.user._id,
+  });
+  res.status(201).json({ success: true, data: transaction });
+});
+
 const listCashboxes = asyncHandler(async (_req, res) => {
   const cashboxes = await Cashbox.find({ isActive: true }).sort({ type: 1, name: 1 });
   res.json({ success: true, data: cashboxes });
@@ -22,4 +31,4 @@ const getSummary = asyncHandler(async (_req, res) => {
   res.json({ success: true, data: summary });
 });
 
-module.exports = { createCashbox, listCashboxes, listTransactions, getSummary };
+module.exports = { createCashbox, addFunds, listCashboxes, listTransactions, getSummary };
