@@ -212,7 +212,6 @@ async function calculatePayroll({ employeeId, year, month }) {
       ? salary.fixedMonthly || 0
       : 0;
 
-  // Non-teachers: fixed_monthly (session earnings 0)
   if (!employee.isTeacher) {
     sessionCount = 0;
     sessionEarnings = 0;
