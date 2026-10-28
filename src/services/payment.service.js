@@ -49,7 +49,6 @@ async function createPayment({
       throw new AppError('payment.overpay', 400);
     }
 
-    // reload after atomic remaining bump
     const fresh = await Subscription.findById(subscriptionId).session(session);
     applyAllocations(fresh, resolved);
     fresh.paidAmount = fresh.paidAmount; // already updated via updateOne
