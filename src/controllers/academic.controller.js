@@ -75,6 +75,40 @@ const listGroups = asyncHandler(async (req, res) => {
   res.json({ success: true, data: groups });
 });
 
+const getGroupRoster = asyncHandler(async (req, res) => {
+  const group = await Group.findById(req.params.id);
+  if (!group) throw new AppError('group.notFound', 404);
+
+  const subscriptions = await Subscription.find({
+    groupId: group._id,
+    status: { $in: [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.COMPLETED] },
+  }).sort({ createdAt: -1 });
+  await Promise.all(subscriptions.map((sub) => ensureLessonBalance(sub)));
+
+  const students = await Student.find({
+    _id: { $in: subscriptions.map((sub) => sub.studentId) },
+  }).select('name nameAr studentCode phone email');
+  const studentById = new Map(students.map((student) => [String(student._id), student]));
+  const seenStudentIds = new Set();
+  const roster = [];
+
+  for (const subscription of subscriptions) {
+    const studentId = String(subscription.studentId);
+    const student = studentById.get(studentId);
+    if (!student || seenStudentIds.has(studentId)) continue;
+    seenStudentIds.add(studentId);
+    roster.push({
+      subscriptionId: subscription._id,
+      status: subscription.status,
+      lessonsPurchased: subscription.lessonsPurchased,
+      lessonsRemaining: subscription.lessonsRemaining,
+      student,
+    });
+  }
+
+  res.json({ success: true, data: { group, students: roster } });
+});
+
 const subscribe = asyncHandler(async (req, res) => {
   const sub = await academic.subscribe({ ...req.body, actorId: req.user._id });
   res.status(201).json({ success: true, data: sub });
@@ -179,6 +213,7 @@ module.exports = {
   updateGroup,
   deleteGroup,
   listGroups,
+  getGroupRoster,
   subscribe,
   transferGroup,
   listTeacherRoster,
