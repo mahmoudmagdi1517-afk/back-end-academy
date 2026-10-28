@@ -143,16 +143,19 @@ const listTeacherRoster = asyncHandler(async (req, res) => {
   ]);
   await Promise.all(subscriptions.map((sub) => ensureLessonBalance(sub)));
   const courseById = new Map(courses.map((course) => [String(course._id), course]));
-  const currentSubscriptions = subscriptions.filter((sub) => sub.status === SUBSCRIPTION_STATUS.ACTIVE);
   const students = await Student.find({
-    _id: { $in: currentSubscriptions.map((sub) => sub.studentId) },
+    _id: { $in: subscriptions.map((sub) => sub.studentId) },
   }).select('name nameAr studentCode');
   const studentById = new Map(students.map((student) => [String(student._id), student]));
   const subscriptionsByGroup = new Map();
-  for (const sub of currentSubscriptions) {
+  const seenStudentsByGroup = new Set();
+  for (const sub of subscriptions) {
     const student = studentById.get(String(sub.studentId));
     if (!student) continue;
     const groupKey = String(sub.groupId);
+    const rosterKey = `${groupKey}:${String(student._id)}`;
+    if (seenStudentsByGroup.has(rosterKey)) continue;
+    seenStudentsByGroup.add(rosterKey);
     const rows = subscriptionsByGroup.get(groupKey) || [];
     rows.push({
       subscriptionId: sub._id,

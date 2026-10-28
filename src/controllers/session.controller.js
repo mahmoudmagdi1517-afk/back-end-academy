@@ -11,10 +11,7 @@ const { AppError } = require('../utils/AppError');
 const { ROLES, SUBSCRIPTION_STATUS } = require('../constants');
 const { DateTime } = require('luxon');
 const { TIMEZONE } = require('../constants');
-const {
-  belongsToGroupForSession,
-  ensureLessonBalance,
-} = require('../services/lessonBalance.service');
+const { belongsToGroupForSession } = require('../services/lessonBalance.service');
 
 function assertTeacherOwnsSession(user, session) {
   if (user.role === ROLES.TEACHER && (
@@ -130,15 +127,13 @@ const getTeacherDashboard = asyncHandler(async (req, res) => {
     Subscription.find({
       groupId: { $in: groupIds },
       status: { $in: [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.COMPLETED] },
-    }).select('groupId studentId'),
+    }).select('groupId studentId createdAt').sort({ createdAt: -1 }),
     Session.find({
       teacherEmployeeId: req.user.employeeId,
       currentDate,
     }).sort({ scheduledStartAt: 1 }),
   ]);
-  await Promise.all(subscriptions.map((sub) => ensureLessonBalance(sub)));
-  const activeRosterSubscriptions = subscriptions.filter((sub) => sub.lessonsRemaining > 0);
-  const studentIds = [...new Set(activeRosterSubscriptions.map((row) => String(row.studentId)))];
+  const studentIds = [...new Set(subscriptions.map((row) => String(row.studentId)))];
   const sessionIds = sessions.map((session) => session._id);
   const [students, attendance] = await Promise.all([
     Student.find({ _id: { $in: studentIds } }).select('name nameAr studentCode').sort({ name: 1 }),
@@ -146,8 +141,12 @@ const getTeacherDashboard = asyncHandler(async (req, res) => {
   ]);
   const studentById = new Map(students.map((student) => [String(student._id), student]));
   const subscriptionsByGroup = new Map();
-  for (const enrollment of activeRosterSubscriptions) {
+  const seenStudentsByGroup = new Set();
+  for (const enrollment of subscriptions) {
     const key = String(enrollment.groupId);
+    const studentKey = `${key}:${String(enrollment.studentId)}`;
+    if (seenStudentsByGroup.has(studentKey)) continue;
+    seenStudentsByGroup.add(studentKey);
     const roster = subscriptionsByGroup.get(key) || [];
     const student = studentById.get(String(enrollment.studentId));
     if (student) roster.push(student);
