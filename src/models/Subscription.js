@@ -52,6 +52,11 @@ const subscriptionSchema = new mongoose.Schema(
     remainingAmount: { type: Number, required: true, min: 0 },
     lessonsPurchased: { type: Number, default: null, min: 0 },
     lessonsRemaining: { type: Number, default: null, min: 0 },
+    renewedToSubscriptionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Subscription',
+      default: null,
+    },
     installments: { type: [installmentSchema], required: true },
     planChangeHistory: { type: [planChangeHistorySchema], default: [] },
     groupTransferHistory: { type: [groupTransferHistorySchema], default: [] },
@@ -65,11 +70,8 @@ const subscriptionSchema = new mongoose.Schema(
 
 subscriptionSchema.index({ studentId: 1, status: 1 });
 subscriptionSchema.index({ groupId: 1, status: 1 });
-// one active subscription per course
-subscriptionSchema.index(
-  { studentId: 1, courseId: 1 },
-  { unique: true, partialFilterExpression: { status: SUBSCRIPTION_STATUS.ACTIVE } }
-);
+subscriptionSchema.index({ studentId: 1, courseId: 1 });
+subscriptionSchema.set('autoIndex', false);
 
 const Subscription = mongoose.model('Subscription', subscriptionSchema);
 

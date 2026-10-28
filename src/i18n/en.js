@@ -29,6 +29,8 @@ module.exports = {
   'teacher.scheduleBusy': 'This teacher schedule is being changed by another request; try again shortly',
   'subscription.notFound': 'Subscription not found',
   'subscription.activeExists': 'Student already has an active subscription for this course',
+  'subscription.notFinished': 'The subscription cannot be renewed until its lessons are finished',
+  'subscription.alreadyRenewed': 'This subscription has already been renewed',
   'subscription.invalidPlan': 'Invalid installment plan',
   'subscription.cannotDelete': 'The subscription cannot be deleted after the group starts or if it has payments or used lessons',
   'payment.notFound': 'Payment not found',

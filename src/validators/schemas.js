@@ -100,6 +100,8 @@ const subscribe = Joi.object({
   studentId: objectId.required(),
   courseId: objectId.required(),
   groupId: objectId.required(),
+  lessonsPurchased: Joi.number().integer().min(1).max(500),
+  renewalOfId: objectId,
   price: Joi.number().integer().min(0),
   installments: Joi.array()
     .items(

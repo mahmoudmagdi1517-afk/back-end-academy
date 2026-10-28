@@ -11,6 +11,7 @@ const studentSchema = new mongoose.Schema(
     dateOfBirth: { type: Date, default: null },
     notes: { type: String, default: null },
     isActive: { type: Boolean, default: true },
+    subscriptionRevision: { type: Number, default: 0, select: false },
   },
   { timestamps: true }
 );

@@ -39,7 +39,7 @@ Refresh tokens are stored hashed (SHA-256).
 
 ## Locked V1 highlights
 
-- One active subscription per course (partial unique index)
+- A student can start a new subscription for a course after using all lessons in the previous one; any unpaid balance remains on the previous subscription.
 - Capacity display-only
 - Session close: unmarked stay unmarked
 - Makeup `feeAmount = 0` / `pricingType: free|paid`

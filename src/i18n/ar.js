@@ -29,6 +29,8 @@ module.exports = {
   'teacher.scheduleBusy': 'يتم تعديل جدول المدرس من طلب آخر؛ حاول مرة أخرى بعد قليل',
   'subscription.notFound': 'الاشتراك غير موجود',
   'subscription.activeExists': 'يوجد اشتراك نشط للطالب في هذه الدورة',
+  'subscription.notFinished': 'لا يمكن تجديد الاشتراك قبل انتهاء الحصص',
+  'subscription.alreadyRenewed': 'تم تجديد هذا الاشتراك من قبل',
   'subscription.invalidPlan': 'خطة الأقساط غير صالحة',
   'subscription.cannotDelete': 'لا يمكن حذف الاشتراك بعد بدء المجموعة أو عند وجود مدفوعات أو حصص مستخدمة',
   'payment.notFound': 'الدفعة غير موجودة',

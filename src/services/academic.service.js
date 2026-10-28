@@ -300,6 +300,8 @@ async function subscribe({
   studentId,
   courseId,
   groupId,
+  lessonsPurchased,
+  renewalOfId,
   price,
   installments,
   notes,
@@ -317,7 +319,44 @@ async function subscribe({
       throw new AppError('subscription.invalidPlan', 400);
     }
 
+    await Student.updateOne(
+      { _id: studentId },
+      { $inc: { subscriptionRevision: 1 } },
+      { session, timestamps: false }
+    );
+    const activeSubscriptions = await Subscription.find({
+      studentId,
+      courseId,
+      status: { $in: [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.COMPLETED] },
+    }).session(session);
+    await Promise.all(activeSubscriptions.map((subscription) => ensureLessonBalance(subscription, session)));
+    if (activeSubscriptions.some((subscription) => subscription.lessonsRemaining > 0)) {
+      throw new AppError('subscription.activeExists', 409);
+    }
+
+    let renewalSource = null;
+    if (renewalOfId) {
+      renewalSource = await Subscription.findById(renewalOfId).session(session);
+      if (
+        !renewalSource ||
+        String(renewalSource.studentId) !== String(studentId)
+      ) {
+        throw new AppError('subscription.notFound', 404);
+      }
+      if (renewalSource.renewedToSubscriptionId) {
+        throw new AppError('subscription.alreadyRenewed', 409);
+      }
+      await ensureLessonBalance(renewalSource, session);
+      if (renewalSource.lessonsRemaining > 0) {
+        throw new AppError('subscription.notFinished', 400);
+      }
+    }
+
     const finalPrice = price ?? course.defaultPrice;
+    const finalLessonsPurchased = lessonsPurchased ?? group.sessionCount;
+    if (!Number.isInteger(finalLessonsPurchased) || finalLessonsPurchased < 1 || finalLessonsPurchased > 500) {
+      throw new AppError('subscription.invalidPlan', 400);
+    }
     const initialPaymentAmount = initialPayment?.amount || 0;
     if (initialPaymentAmount < 0 || initialPaymentAmount > finalPrice) {
       throw new AppError('payment.overpay', 400);
@@ -336,8 +375,8 @@ async function subscribe({
             price: finalPrice,
             paidAmount: 0,
             remainingAmount: finalPrice,
-            lessonsPurchased: group.sessionCount,
-            lessonsRemaining: group.sessionCount,
+            lessonsPurchased: finalLessonsPurchased,
+            lessonsRemaining: finalLessonsPurchased,
             installments: plan,
             startedAt: nowUtc(),
             notes: notes || null,
@@ -345,6 +384,11 @@ async function subscribe({
         ],
         { session }
       );
+
+      if (renewalSource) {
+        renewalSource.renewedToSubscriptionId = sub._id;
+        await renewalSource.save({ session });
+      }
 
       if (initialPayment?.amount > 0) {
         const allocations = buildFifoAllocations(sub, initialPaymentAmount);
