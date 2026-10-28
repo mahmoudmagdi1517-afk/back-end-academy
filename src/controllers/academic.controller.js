@@ -132,14 +132,18 @@ const listTeacherRoster = asyncHandler(async (req, res) => {
   const groups = await Group.find({
     teacherEmployeeId: req.user.employeeId,
     isActive: true,
-  }).select('name nameAr courseId teacherEmployeeId sessionCount').sort({ name: 1 });
+  }).select('name nameAr courseId teacherEmployeeId sessionCount schedules').sort({ name: 1 });
   const groupIds = groups.map((group) => group._id);
-  const subscriptions = await Subscription.find({
-    groupId: { $in: groupIds },
-    status: { $in: [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.COMPLETED] },
-  }).sort({ createdAt: -1 });
+  const [subscriptions, courses] = await Promise.all([
+    Subscription.find({
+      groupId: { $in: groupIds },
+      status: { $in: [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.COMPLETED] },
+    }).sort({ createdAt: -1 }),
+    Course.find({ _id: { $in: groups.map((group) => group.courseId) } }).select('name nameAr'),
+  ]);
   await Promise.all(subscriptions.map((sub) => ensureLessonBalance(sub)));
-  const currentSubscriptions = subscriptions.filter((sub) => sub.lessonsRemaining > 0);
+  const courseById = new Map(courses.map((course) => [String(course._id), course]));
+  const currentSubscriptions = subscriptions.filter((sub) => sub.status === SUBSCRIPTION_STATUS.ACTIVE);
   const students = await Student.find({
     _id: { $in: currentSubscriptions.map((sub) => sub.studentId) },
   }).select('name nameAr studentCode');
@@ -164,6 +168,7 @@ const listTeacherRoster = asyncHandler(async (req, res) => {
     data: {
       groups: groups.map((group) => ({
         ...group.toObject(),
+        course: courseById.get(String(group.courseId)) || null,
         students: subscriptionsByGroup.get(String(group._id)) || [],
       })),
     },

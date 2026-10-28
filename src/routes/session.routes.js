@@ -10,6 +10,7 @@ router.use(authenticate);
 
 router.post('/', requireRoles(ROLES.MANAGER, ROLES.OWNER, ROLES.ADMIN), validate(schemas.createSession), ctrl.createSession);
 router.get('/teacher-dashboard', requireRoles(ROLES.TEACHER), ctrl.getTeacherDashboard);
+router.get('/teacher-report', requireRoles(ROLES.TEACHER), validate(schemas.teacherReportQuery, 'query'), ctrl.getTeacherReport);
 router.get('/', requireRoles(ROLES.MANAGER, ROLES.OWNER, ROLES.ADMIN, ROLES.TEACHER), ctrl.listSessions);
 
 router.post('/makeups', requirePermission('makeup.create'), validate(schemas.createMakeup), ctrl.createMakeup);

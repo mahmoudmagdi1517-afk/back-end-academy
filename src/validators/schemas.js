@@ -209,6 +209,13 @@ const attendanceBatch = Joi.object({
     .required(),
 });
 
+const teacherReportQuery = Joi.object({
+  fromDate: qatarDate,
+  toDate: qatarDate,
+  groupId: objectId,
+  studentId: objectId,
+});
+
 const createMakeup = Joi.object({
   studentId: objectId.required(),
   groupId: objectId.required(),
@@ -301,6 +308,7 @@ module.exports = {
   cancelSession,
   upsertAttendance,
   attendanceBatch,
+  teacherReportQuery,
   createMakeup,
   createEmployee,
   updateEmployee,

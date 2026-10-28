@@ -1,6 +1,7 @@
 const { Session } = require('../models/Session');
 const { Attendance } = require('../models/Attendance');
 const { Group } = require('../models/Group');
+const { Course } = require('../models/Course');
 const { Subscription } = require('../models/Subscription');
 const { Student } = require('../models/Student');
 const { MakeupSession } = require('../models/MakeupSession');
@@ -175,6 +176,87 @@ const getTeacherDashboard = asyncHandler(async (req, res) => {
   });
 });
 
+const getTeacherReport = asyncHandler(async (req, res) => {
+  if (!req.user.employeeId) {
+    return res.json({ success: true, data: { groups: [], sessions: [] } });
+  }
+
+  const groups = await Group.find({
+    teacherEmployeeId: req.user.employeeId,
+    isActive: true,
+    ...(req.query.groupId ? { _id: req.query.groupId } : {}),
+  }).select('name nameAr courseId schedules').sort({ name: 1 });
+  const groupIds = groups.map((group) => group._id);
+  if (groupIds.length === 0) {
+    return res.json({ success: true, data: { groups: [], sessions: [] } });
+  }
+
+  const sessionQuery = { teacherEmployeeId: req.user.employeeId, groupId: { $in: groupIds } };
+  if (req.query.fromDate || req.query.toDate) {
+    sessionQuery.currentDate = {};
+    if (req.query.fromDate) sessionQuery.currentDate.$gte = req.query.fromDate;
+    if (req.query.toDate) sessionQuery.currentDate.$lte = req.query.toDate;
+  }
+
+  const [sessions, subscriptions, courses] = await Promise.all([
+    Session.find(sessionQuery).sort({ scheduledStartAt: 1 }).limit(1000),
+    Subscription.find({
+      status: { $in: [SUBSCRIPTION_STATUS.ACTIVE, SUBSCRIPTION_STATUS.COMPLETED] },
+      $or: [
+        { groupId: { $in: groupIds } },
+        { 'groupTransferHistory.fromGroupId': { $in: groupIds } },
+        { 'groupTransferHistory.toGroupId': { $in: groupIds } },
+      ],
+      ...(req.query.studentId ? { studentId: req.query.studentId } : {}),
+    }).select('groupId studentId groupTransferHistory startedAt'),
+    Course.find({ _id: { $in: groups.map((group) => group.courseId) } }).select('name nameAr'),
+  ]);
+  const studentIds = [...new Set(subscriptions.map((sub) => String(sub.studentId)))];
+  const [students, attendance] = await Promise.all([
+    Student.find({ _id: { $in: studentIds } }).select('name nameAr studentCode'),
+    Attendance.find({ sessionId: { $in: sessions.map((session) => session._id) } }),
+  ]);
+  const studentById = new Map(students.map((student) => [String(student._id), student]));
+  const coursesById = new Map(courses.map((course) => [String(course._id), course]));
+  const groupById = new Map(groups.map((group) => [String(group._id), group]));
+  const attendanceBySession = new Map();
+  for (const record of attendance) {
+    const key = String(record.sessionId);
+    const records = attendanceBySession.get(key) || [];
+    records.push(record);
+    attendanceBySession.set(key, records);
+  }
+
+  res.json({
+    success: true,
+    data: {
+      groups: groups.map((group) => ({
+        ...group.toObject(),
+        course: coursesById.get(String(group.courseId)) || null,
+      })),
+      sessions: sessions.map((session) => {
+        const group = groupById.get(String(session.groupId));
+        const enrolledStudents = subscriptions
+          .filter((sub) => belongsToGroupForSession(sub, session.groupId, session))
+          .map((sub) => studentById.get(String(sub.studentId)))
+          .filter((student) => student && (
+            !req.query.studentId || String(student._id) === String(req.query.studentId)
+          ));
+        return {
+          ...session.toObject(),
+          groupName: group?.name || '',
+          groupNameAr: group?.nameAr || null,
+          course: group ? coursesById.get(String(group.courseId)) || null : null,
+          students: enrolledStudents,
+          attendance: (attendanceBySession.get(String(session._id)) || []).filter((record) =>
+            !req.query.studentId || String(record.studentId) === String(req.query.studentId)
+          ),
+        };
+      }),
+    },
+  });
+});
+
 const createMakeup = asyncHandler(async (req, res) => {
   const doc = await sessionService.createMakeup({ ...req.body, actorId: req.user._id });
   res.status(201).json({ success: true, data: doc });
@@ -202,6 +284,7 @@ module.exports = {
   getSession,
   listSessions,
   getTeacherDashboard,
+  getTeacherReport,
   createMakeup,
   markMakeupMissed,
   listMakeups,

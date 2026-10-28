@@ -31,7 +31,6 @@ async function createExpense({ cashboxId, category, description, amount, spentAt
           cashboxId,
           category,
           description,
-          
           amount,
           spentAt,
           notes: notes || null,
