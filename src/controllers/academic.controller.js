@@ -1,6 +1,7 @@
 const { Student } = require('../models/Student');
 const { Course } = require('../models/Course');
 const { Group } = require('../models/Group');
+const { Employee } = require('../models/Employee');
 const { Subscription } = require('../models/Subscription');
 const academic = require('../services/academic.service');
 const { asyncHandler } = require('../middlewares/asyncHandler');
@@ -72,8 +73,33 @@ const listGroups = asyncHandler(async (req, res) => {
   const q = {};
   if (req.query.courseId) q.courseId = req.query.courseId;
   const groups = await Group.find(q).sort({ name: 1 });
-  res.json({ success: true, data: groups });
+  res.json({ success: true, data: await addScheduleTeacherNames(groups) });
 });
+
+async function addScheduleTeacherNames(groups) {
+  const teacherIds = [
+    ...new Set(groups.flatMap((group) => [
+      group.teacherEmployeeId,
+      ...(group.schedules || []).map((slot) => slot.teacherEmployeeId),
+    ]).filter(Boolean).map(String)),
+  ];
+  const employees = await Employee.find({ _id: { $in: teacherIds } }).select('name nameAr');
+  const employeeById = new Map(employees.map((employee) => [String(employee._id), employee]));
+  return groups.map((group) => {
+    const data = group.toObject();
+    return {
+      ...data,
+      schedules: (data.schedules || []).map((slot) => {
+        const teacher = employeeById.get(String(slot.teacherEmployeeId || data.teacherEmployeeId || ''));
+        return {
+          ...slot,
+          teacherName: teacher?.name || null,
+          teacherNameAr: teacher?.nameAr || null,
+        };
+      }),
+    };
+  });
+}
 
 const getGroupRoster = asyncHandler(async (req, res) => {
   const group = await Group.findById(req.params.id);
@@ -106,7 +132,8 @@ const getGroupRoster = asyncHandler(async (req, res) => {
     });
   }
 
-  res.json({ success: true, data: { group, students: roster } });
+  const [groupWithTeacherNames] = await addScheduleTeacherNames([group]);
+  res.json({ success: true, data: { group: groupWithTeacherNames, students: roster } });
 });
 
 const subscribe = asyncHandler(async (req, res) => {
@@ -130,7 +157,10 @@ const listTeacherRoster = asyncHandler(async (req, res) => {
     return res.json({ success: true, data: { groups: [] } });
   }
   const groups = await Group.find({
-    teacherEmployeeId: req.user.employeeId,
+    $or: [
+      { teacherEmployeeId: req.user.employeeId },
+      { 'schedules.teacherEmployeeId': req.user.employeeId },
+    ],
     isActive: true,
   }).select('name nameAr courseId teacherEmployeeId sessionCount schedules').sort({ name: 1 });
   const groupIds = groups.map((group) => group._id);
@@ -169,8 +199,8 @@ const listTeacherRoster = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: {
-      groups: groups.map((group) => ({
-        ...group.toObject(),
+      groups: (await addScheduleTeacherNames(groups)).map((group) => ({
+        ...group,
         course: courseById.get(String(group.courseId)) || null,
         students: subscriptionsByGroup.get(String(group._id)) || [],
       })),

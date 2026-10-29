@@ -83,7 +83,6 @@ async function createSession({
 }) {
   const group = await Group.findById(groupId);
   if (!group) throw new AppError('group.notFound', 404);
-  const effectiveTeacherId = teacherEmployeeId || group.teacherEmployeeId || null;
   let scheduledStartAt;
   let scheduledEndAt;
   try {
@@ -93,11 +92,28 @@ async function createSession({
     throw new AppError('session.invalidSchedule', 400);
   }
   if (scheduledEndAt <= scheduledStartAt) throw new AppError('session.invalidSchedule', 400);
+  const dayOfWeek = DateTime.fromISO(originalDate, { zone: TIMEZONE }).weekday;
+  const matchingSchedule = scheduleSlotId
+    ? group.schedules.id(scheduleSlotId)
+    : group.schedules.find((slot) =>
+        slot.dayOfWeek === dayOfWeek &&
+        slot.startTime === startTime &&
+        slot.endTime === endTime
+      );
+  const effectiveScheduleSlotId = scheduleSlotId || matchingSchedule?._id || null;
+  const effectiveTeacherId = teacherEmployeeId ||
+    matchingSchedule?.teacherEmployeeId ||
+    group.teacherEmployeeId ||
+    null;
 
   return withTeacherScheduleLocks([effectiveTeacherId], async () => {
     await assertActiveTeacher(effectiveTeacherId);
-    if (scheduleSlotId) {
-      const existing = await Session.findOne({ groupId, scheduleSlotId, originalDate });
+    if (effectiveScheduleSlotId) {
+      const existing = await Session.findOne({
+        groupId,
+        scheduleSlotId: effectiveScheduleSlotId,
+        originalDate,
+      });
       if (existing) return existing;
     }
     await assertNoSessionConflict({
@@ -108,7 +124,7 @@ async function createSession({
     });
     return Session.create({
       groupId,
-      scheduleSlotId: scheduleSlotId || null,
+      scheduleSlotId: effectiveScheduleSlotId,
       courseId: group.courseId,
       teacherEmployeeId: effectiveTeacherId,
       originalDate,
@@ -153,7 +169,7 @@ async function generateScheduledSessionsForDate(date, dayOfWeek) {
           originalDate: date,
           startTime: slot.startTime,
           endTime: slot.endTime,
-          teacherEmployeeId: group.teacherEmployeeId,
+          teacherEmployeeId: slot.teacherEmployeeId || group.teacherEmployeeId,
           scheduleSlotId: slot._id,
         });
         if (session.scheduleSlotId) created += 1;
@@ -224,7 +240,7 @@ async function syncGroupSessions(group, { replaceFuture = false } = {}) {
         originalDate: dateString,
         startTime: slot.startTime,
         endTime: slot.endTime,
-        teacherEmployeeId: group.teacherEmployeeId,
+        teacherEmployeeId: slot.teacherEmployeeId || group.teacherEmployeeId,
         scheduleSlotId: slot._id,
       });
       created += 1;

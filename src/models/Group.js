@@ -5,6 +5,7 @@ const scheduleSlotSchema = new mongoose.Schema(
     dayOfWeek: { type: Number, required: true, min: 1, max: 7 },
     startTime: { type: String, required: true, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
     endTime: { type: String, required: true, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+    teacherEmployeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', default: null },
   },
   { _id: true }
 );

@@ -119,7 +119,10 @@ const getTeacherDashboard = asyncHandler(async (req, res) => {
   }
   const currentDate = req.query.currentDate || DateTime.now().setZone(TIMEZONE).toISODate();
   const groups = await Group.find({
-    teacherEmployeeId: req.user.employeeId,
+    $or: [
+      { teacherEmployeeId: req.user.employeeId },
+      { 'schedules.teacherEmployeeId': req.user.employeeId },
+    ],
     isActive: true,
   }).select('name nameAr courseId teacherEmployeeId schedules').sort({ name: 1 });
   const groupIds = groups.map((group) => group._id);
@@ -181,7 +184,10 @@ const getTeacherReport = asyncHandler(async (req, res) => {
   }
 
   const groups = await Group.find({
-    teacherEmployeeId: req.user.employeeId,
+    $or: [
+      { teacherEmployeeId: req.user.employeeId },
+      { 'schedules.teacherEmployeeId': req.user.employeeId },
+    ],
     isActive: true,
     ...(req.query.groupId ? { _id: req.query.groupId } : {}),
   }).select('name nameAr courseId schedules').sort({ name: 1 });

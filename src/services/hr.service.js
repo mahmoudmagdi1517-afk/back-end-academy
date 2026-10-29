@@ -61,7 +61,12 @@ async function updateEmployee({ employeeId, payload }) {
     if (roleChanged) {
       const [linkedUser, assignedGroup, assignedSession] = await Promise.all([
         User.exists({ employeeId }).session(session),
-        Group.exists({ teacherEmployeeId: employeeId }).session(session),
+        Group.exists({
+          $or: [
+            { teacherEmployeeId: employeeId },
+            { 'schedules.teacherEmployeeId': employeeId },
+          ],
+        }).session(session),
         Session.exists({ teacherEmployeeId: employeeId }).session(session),
       ]);
       if (linkedUser) throw new AppError('employee.accountRoleChange', 409);
@@ -101,7 +106,12 @@ async function deleteEmployee(employeeId) {
 
     const references = await Promise.all([
       User.exists({ employeeId }).session(session),
-      Group.exists({ teacherEmployeeId: employeeId }).session(session),
+      Group.exists({
+        $or: [
+          { teacherEmployeeId: employeeId },
+          { 'schedules.teacherEmployeeId': employeeId },
+        ],
+      }).session(session),
       Session.exists({ teacherEmployeeId: employeeId }).session(session),
       SalaryConfiguration.exists({ employeeId }).session(session),
       Payroll.exists({ employeeId }).session(session),

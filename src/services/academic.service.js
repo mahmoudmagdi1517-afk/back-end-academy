@@ -67,23 +67,57 @@ async function assertActiveTeacher(teacherEmployeeId) {
   if (!teacher) throw new AppError('employee.notFound', 404);
 }
 
+function assignedTeacherIds(teacherEmployeeId, schedules = []) {
+  return [...new Set(
+    schedules
+      .map((slot) => slot.teacherEmployeeId || teacherEmployeeId)
+      .filter(Boolean)
+      .map(String)
+  )];
+}
+
+function scheduleAssignmentSignature(group) {
+  const schedules = (group.schedules || [])
+    .map((slot) => [
+      String(slot._id || ''),
+      slot.dayOfWeek,
+      slot.startTime,
+      slot.endTime,
+      String(slot.teacherEmployeeId || ''),
+    ])
+    .sort((first, second) => first[0].localeCompare(second[0]));
+  return JSON.stringify([String(group.teacherEmployeeId || ''), schedules]);
+}
+
 async function assertNoTeacherScheduleConflict({ teacherEmployeeId, schedules, excludeGroupId }) {
-  if (!teacherEmployeeId || !schedules?.length) return;
-  const query = { teacherEmployeeId, isActive: true };
+  const teacherIds = assignedTeacherIds(teacherEmployeeId, schedules);
+  if (!teacherIds.length || !schedules?.length) return;
+  const query = {
+    isActive: true,
+    $or: [
+      { teacherEmployeeId: { $in: teacherIds } },
+      { 'schedules.teacherEmployeeId': { $in: teacherIds } },
+    ],
+  };
   if (excludeGroupId) query._id = { $ne: excludeGroupId };
-  const groups = await Group.find(query).select('name schedules');
+  const groups = await Group.find(query).select('name teacherEmployeeId schedules');
   for (const group of groups) {
-    const conflict = schedules.find((slot) =>
-      (group.schedules || []).some((other) => schedulesOverlap(slot, other))
-    );
-    if (conflict) {
-      throw new AppError('group.teacherScheduleConflict', 409, {
-        groupId: group._id,
-        groupName: group.name,
-        dayOfWeek: conflict.dayOfWeek,
-        startTime: conflict.startTime,
-        endTime: conflict.endTime,
-      });
+    for (const slot of schedules) {
+      const teacherId = slot.teacherEmployeeId || teacherEmployeeId;
+      if (!teacherId) continue;
+      const conflict = (group.schedules || []).find((other) =>
+        String(other.teacherEmployeeId || group.teacherEmployeeId || '') === String(teacherId) &&
+        schedulesOverlap(slot, other)
+      );
+      if (conflict) {
+        throw new AppError('group.teacherScheduleConflict', 409, {
+          groupId: group._id,
+          groupName: group.name,
+          dayOfWeek: slot.dayOfWeek,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+        });
+      }
     }
   }
 }
@@ -155,8 +189,9 @@ async function createGroup(payload) {
   if (!course.isActive) throw new AppError('course.archived', 409);
   const schedules = payload.schedules || [];
   assertValidSchedules(schedules);
-  const group = await withTeacherScheduleLocks([payload.teacherEmployeeId], async () => {
-    await assertActiveTeacher(payload.teacherEmployeeId);
+  const teacherIds = assignedTeacherIds(payload.teacherEmployeeId, schedules);
+  const group = await withTeacherScheduleLocks(teacherIds, async () => {
+    await Promise.all(teacherIds.map(assertActiveTeacher));
     await assertNoTeacherScheduleConflict({
       teacherEmployeeId: payload.teacherEmployeeId,
       schedules,
@@ -181,22 +216,30 @@ async function updateGroup(groupId, payload) {
   const original = await Group.findById(groupId);
   if (!original) throw new AppError('group.notFound', 404);
 
+  const requestedTeacherId = payload.teacherEmployeeId === undefined
+    ? original.teacherEmployeeId
+    : payload.teacherEmployeeId;
+  const requestedSchedules = payload.schedules === undefined
+    ? original.schedules
+    : payload.schedules;
   const updated = await withTeacherScheduleLocks(
-    [original.teacherEmployeeId, payload.teacherEmployeeId],
+    [
+      ...assignedTeacherIds(original.teacherEmployeeId, original.schedules),
+      ...assignedTeacherIds(requestedTeacherId, requestedSchedules),
+    ],
     async () => {
       const current = await Group.findById(groupId);
       if (!current) throw new AppError('group.notFound', 404);
-      if (String(current.teacherEmployeeId || '') !== String(original.teacherEmployeeId || '')) {
+      if (scheduleAssignmentSignature(current) !== scheduleAssignmentSignature(original)) {
         throw new AppError('group.scheduleChanged', 409);
       }
       const nextTeacherId = payload.teacherEmployeeId === undefined
         ? current.teacherEmployeeId
         : payload.teacherEmployeeId;
-      if (String(nextTeacherId || '') !== String(original.teacherEmployeeId || '')) {
-        await assertActiveTeacher(nextTeacherId);
-      }
       const nextSchedules = payload.schedules === undefined ? current.schedules : payload.schedules;
       assertValidSchedules(nextSchedules);
+      const nextTeacherIds = assignedTeacherIds(nextTeacherId, nextSchedules);
+      await Promise.all(nextTeacherIds.map(assertActiveTeacher));
       await assertNoTeacherScheduleConflict({
         teacherEmployeeId: nextTeacherId,
         schedules: nextSchedules,
@@ -494,13 +537,18 @@ async function transferGroup({ subscriptionId, newGroupId, actorId, actorRole, a
     }
     if (actorRole === 'teacher') {
       const currentGroup = await Group.findById(sub.groupId)
-        .select('teacherEmployeeId')
+        .select('teacherEmployeeId schedules')
         .session(session);
+      const isAssignedToGroup = (candidate) =>
+        candidate && (
+          String(candidate.teacherEmployeeId || '') === String(actorEmployeeId) ||
+          (candidate.schedules || []).some((slot) =>
+            String(slot.teacherEmployeeId || candidate.teacherEmployeeId || '') === String(actorEmployeeId)
+          )
+        );
       if (
-        !currentGroup ||
-        !group.teacherEmployeeId ||
-        String(currentGroup.teacherEmployeeId) !== String(actorEmployeeId) ||
-        String(group.teacherEmployeeId) !== String(actorEmployeeId)
+        !isAssignedToGroup(currentGroup) ||
+        !isAssignedToGroup(group)
       ) {
         throw new AppError('rbac.denied', 403);
       }

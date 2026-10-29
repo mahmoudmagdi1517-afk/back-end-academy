@@ -15,6 +15,7 @@ const groupSchedule = Joi.object({
   dayOfWeek: Joi.number().integer().min(1).max(7).required(),
   startTime: timeOfDay.required(),
   endTime: timeOfDay.required(),
+  teacherEmployeeId: objectId.allow(null),
 });
 
 const login = Joi.object({
